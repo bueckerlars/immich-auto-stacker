@@ -1,6 +1,10 @@
 # Build stage
 FROM python:3.13-slim AS builder
 
+# git is required for uv to install immich-sdk from GitHub
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -37,5 +41,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
 # Default command (can be overridden)
-CMD ["python", "-m", "python-template.main"]
-
+CMD ["python", "-m", "immich_auto_stacker"]

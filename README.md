@@ -1,383 +1,205 @@
-# Python Project Template
+# immich-auto-stacker
 
-This repository serves as a template for initializing Python projects on GitHub. It provides a basic structure and configuration files to help you get started quickly with your Python projects.
+Periodic automation for [Immich](https://immich.app/) that groups related assets into stacks using configurable filename rules. It is inspired by [mattdavis90/immich-stacker](https://github.com/mattdavis90/immich-stacker) but runs as a long-lived process (or single run) in Python, with optional continuous scanning.
 
-## Getting Started
+The Immich web UI supports manual stacking; this tool applies the same idea at scale via the [Immich API](https://api.immich.app/introduction).
 
-To use this template for your Python project, follow these steps:
+## Features
 
-1. Click on the "Use this template" button at the top of this repository.
-2. Provide a name for your new repository.
-3. Optionally, provide a description for your new repository.
-4. Choose the visibility (internal or private) for your new repository.
-5. Click on the "Create repository from template" button.
+- Match assets with two regular expressions: which files participate (`IMMICH_MATCH`) and which file becomes the stack parent (`IMMICH_PARENT`).
+- Paginated metadata search, optional time filter (`IMMICH_NEWER_THAN`), and optional grouping by file creation time (`IMMICH_COMPARE_CREATED`).
+- Skips parents that already belong to a non-empty stack.
+- Dry-run and read-only modes for safe testing.
+- TLS verification can be disabled for private certificates (use with care).
+- Configurable scan interval or one-shot mode for cron-style deployments.
 
-After you have initialized your repository from this template and have cloned it to your local machine, adapt the following:
-- Rename the package `python-template` in the source code directory `src` to your desired package name.
-- Adapt the `pyproject.toml` file:
-    - Within the section `[project]`, adapt the keys `description` and `name`. Make further changes to keys as you see fit.
-    - Within the section `[project.urls]`, adapt both keys `"Bug Tracker"`  and `"Homepage"`.
-- Adapt the `Dockerfile`:
-    - Update the `CMD` instruction to match your package name and entry point (e.g., change `python-template.main` to `your-package-name.main`).
-- Change the content of the `README.md` file, giving users of your package brief information about the purpose of your package, as well as how they can install and use your package.
+## Requirements
 
-Then, install your project and start coding:
+- Python 3.13 or later
+- [uv](https://docs.astral.sh/uv/) (recommended)
+- An Immich API key with at least `asset.read` and `stack.*` (see [Immich API keys](https://immich.app/docs/features/command-line-interface#api-keys))
+
+HTTP client models and types are provided by [immich-sdk](https://github.com/bueckerlars/immich-sdk) (installed from Git as specified in `pyproject.toml`).
+
+## Installation
+
+```bash
+git clone https://github.com/bueckerlars/immich-auto-stacker.git
+cd immich-auto-stacker
+uv sync
+```
+
+For development (tests, linting, type checking, [Poe the Poet](https://github.com/nat-n/poethepoet) task runner):
+
 ```bash
 uv sync --all-extras
-pre-commit install
 ```
 
-## Project Structure
-The template follows a specific structure to organize your project files:
+## Configuration
 
-- `src/`: This directory is where the main source code of the project resides.
-- `src/my_project`: This directory contains the source code regarding your Python **package** (here: called `my_project`).
-- `tests/`: This directory contains the unit tests for the project.
-- `README.md`: This file provides an overview of the project and its purpose.
-- `pyproject.toml`: This file is used for managing project dependencies and build configurations.
-- `.pre-commit-config.yaml`: This file contains the configuration for pre-commit hooks, which are used for code quality checks and formatting.
-- `.gitignore`: This file specifies which files and directories should be ignored by Git.
+All settings use the `IMMICH_` prefix and can be loaded from the environment or a `.env` file in the working directory.
 
+### Required
 
+| Variable         | Description                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IMMICH_API_KEY` | API key sent as `x-api-key`.                                                                                                                                              |
+| `IMMICH_MATCH`   | Regex applied to each asset `originalFileName`. Matching files are grouped by the filename with all regex matches removed (same idea as the Go reference implementation). |
+| `IMMICH_PARENT`  | Regex: if it matches the filename, that asset is the stack parent for its group.                                                                                          |
 
-## Application Context, Inversion of Control, and Dependency Injection
+You must set at least one of:
 
-Your new project should use an **Application Context** as a deliberate architectural pattern to wire and assemble the application.
+| Variable            | Description                                                                                                                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IMMICH_SERVER_URL` | Server root URL, e.g. `https://photos.example.com` (validated as a URL).                                                                                                                                              |
+| `IMMICH_ENDPOINT`   | Legacy alias: full URL including `/api` if you migrate from [immich-stacker](https://github.com/mattdavis90/immich-stacker). A trailing `/api` is stripped for the HTTP client, which expects paths under `/api/...`. |
 
-The goal of the application context is simple:
+### Optional
 
-> **Assemble the application once, at startup, and never let domain or service code care about how dependencies are created.**
+| Variable                 | Default | Description                                                                                                                       |
+| ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `IMMICH_LOG_LEVEL`       | `INFO`  | Logging level.                                                                                                                    |
+| `IMMICH_COMPARE_CREATED` | `false` | Append file creation time to the group key when filenames are not unique.                                                         |
+| `IMMICH_NEWER_THAN`      | `0h`    | Only consider assets with `taken` time newer than now minus this duration. Format: `<number>s`, `m`, or `h` (e.g. `24h`, `300s`). |
+| `IMMICH_SCAN_INTERVAL`   | `1h`    | Delay between scans when not in once mode. Same duration format as `NEWER_THAN`.                                                  |
+| `IMMICH_ONCE`            | `false` | If `true`, run a single scan and exit (suitable for external schedulers).                                                         |
+| `IMMICH_READ_ONLY`       | `false` | Do not call stack creation; only log what would happen.                                                                           |
+| `IMMICH_DRY_RUN`         | `false` | Same as read-only for stack writes; logs intended stacks.                                                                         |
+| `IMMICH_INSECURE_TLS`    | `false` | Disable TLS certificate verification (emits a warning at startup).                                                                |
 
-This pattern exists mainly to keep database sessions, repositories, services, and infrastructure concerns properly separated.
+## Usage
 
-
-### What the Application Context is
-
-The application context is:
-
-* a **composition root**
-* a **dependency wiring container**
-* a **factory for fully-initialized services**
-
-It is the single place where:
-
-* settings are loaded
-* infrastructure clients are created (Postgres, Redis, etc.)
-* repositories are constructed
-* services are constructed with all dependencies already provided
-
-In short:
-**all wiring happens here, and only here.**
-
-Once the context is created, the rest of the application *only* consumes what it provides. It must never care about *how* things are created.
-
-
-### What the Application Context is *not*
-
-The application context is **not**:
-
-* a singleton registry
-* a global object you pull things from
-* a place to *look up* dependencies from inside services
-* a service locator
-
-Services must never call into the application context to fetch dependencies.
-
-
-### What is a Composition Root?
-
-The application context acts as the **composition root** of the application.
-
-A composition root is the **one place in your application where the object graph is built**.
-
-This means:
-- all services
-- all repositories
-- all clients
-- all settings
-- and all your other objects having dependencies
-
-are created and wired together here - and only here.
-After this point, *no new wiring* happens anywhere else. Everything else just uses already-assembled objects. That also means that no object constructs its own dependencies, it only receives them.
-
-The term *wiring* just means initializing objects (like services) and providing them with their dependencies (like repositories, clients, settings, etc.).
-
-**Key Properties:**
-- exactly one place
-- runs at application startup, called and initialized in your main entry point
-- knows *everything*
-- nothing else knows how things are wired
-
-**Example**:
-
-```python
-class ApplicationContext:
-    @property
-    def settings(self) -> Settings:
-        return Settings()
-
-    @property
-    def database_client(self) -> DatabaseClient:
-        return DatabaseClient(self.settings.database_url)
-
-    @property
-    def user_repository(self) -> UserRepository:
-        return UserRepository(self.database_client)
-
-    @property
-    def user_service(self) -> UserService:
-        return UserService(self.user_repository)
+```bash
+export IMMICH_SERVER_URL=https://immich.example.com
+export IMMICH_API_KEY=your-api-key
+export IMMICH_MATCH='\.(JPG|RW2)$'
+export IMMICH_PARENT='\.JPG$'
+uv run python -m immich_auto_stacker
 ```
 
-Then in your entry point (FastAPI, CLI, Streamlit, etc.):
+Or use the console script after `uv sync`:
 
-```python
-app_context = ApplicationContext()
-user_service = app_context.user_service
-# Do some stuff with the user service
-return user_service.get_all_users()
+```bash
+uv run immich-auto-stacker
 ```
 
-### Inversion of Control (IoC)
+With dev dependencies installed, you can start the same entry point via [poethepoet](https://github.com/nat-n/poethepoet):
 
-Inversion of Control means that code does **not** control and/or create its own dependencies. Instead, its dependencies are provided from the outside.
-
-Take the user service for example. Instead of the user service acting like this:
-
-> “I need dependency X, I’ll go create it myself”
-
-the service should act like this:
-
-> “I need dependency X, someone else must provide it to me”
-
-The control over *how things are created* is inverted and taken away from the code itself.
-
-**Without IoC (bad)**:
-
-```python
-class UserService:
-    def __init__(self) -> None:
-        self._settings = Settings()
-        self._database_client = DatabaseClient(self._settings.database_url)
-        self._repository = UserRepository(self._database_client)
-```
-Here:
-- the service controls everything
-- it decides concrete implementations
-- it is tightly coupled to infrastructure
-
-**With IoC (good)**:
-
-```python
-class UserService:
-    def __init__(self, repository: UserRepository) -> None:
-        self._repository = repository
-```
-Now:
-- the service does **not** control creation of dependencies
-- it just declares which dependencies it needs
-- something else (the application context) provides its dependencies
-
-Note that IoC is a *principle*, not a tool. Dependency Injection is one way to implement IoC.
-
-### Dependency Injection (DI)
-
-Dependency Injection means:
-> Dependencies are provided into an object instead of being created or fetched by the object itself.
-
-In our case, the application context **injects** or **wires** dependencies into services via their constructors.
-
-**Example**:
-
-```python
-class ApplicationContext:
-    @property
-    def settings(self) -> Settings:
-        return Settings()
-
-    @property
-    def database_client(self) -> DatabaseClient:
-        return DatabaseClient(self.settings.database_url)
-
-    @property
-    def user_repository(self) -> UserRepository:
-        return UserRepository(self.database_client)
-
-    @property
-    def user_service(self) -> UserService:
-        return UserService(repository=self.user_repository)
-```
-This is the *cleanest and most explicit* way to declare dependencies.
-
-Thus, the user service above:
-
-* does not know where the repository comes from
-* does not know how it was configured
-* does not know about settings or environment variables
-
-All of that is handled by the application context.
-
-**Why this is good**:
-- dependencies are explicit and visible in the constructor (the user service depends on a user repository)
-- easy to test by providing mock or fake dependencies
-- no globals
-- no hidden dependencies, no hidden magic
-
-**Testing Example**:
-
-```python
-def test_user_service() -> None:
-    fake_repository = FakeUserRepository()
-    service = UserService(repository=fake_repository)
-    # Test service methods here
-```
-No application context. No database clients. No monkey-patching. Just a simple fake repository.
-
-**DI Containers**
-
-Libraries like [dependency-injector](https://python-dependency-injector.ets-labs.org/) or [autowired](https://pypi.org/project/autowired/) just automate the wiring part.
-They do not change the fundamental principles of IoC or DI, they just reduce boilerplate.
-
-### Why we do not use a Service Locator
-
-A service locator is a **global object that you ask for dependencies**.
-
-In other words:
-
-> “Hey container, give me dependency X.”
-
-**Example**:
-
-```python
-class ApplicationContext:
-    @property
-    def settings(self) -> Settings:
-        return Settings()
-
-    @property
-    def datahub_client(self) -> DataHubClient:
-        return DataHubClient(self.settings.datahub_url)
-
-class UserService:
-    def __init__(self) -> None:
-        self._datahub_client = ApplicationContext().datahub_client
+```bash
+uv run poe run
 ```
 
-Here, the service **pulls** what it needs from a globally accessible context.
+The process listens for `SIGTERM` and `SIGINT` so it stops cleanly under Docker and process managers.
 
+## Example rules
 
-#### Why this is problematic
+These mirror the examples in [immich-stacker](https://github.com/mattdavis90/immich-stacker):
 
-##### 1. Hidden dependencies
+**RAW + JPEG (JPEG as parent)**
 
-Looking at the constructor:
-
-```python
-class UserService:
-    def __init__(self) -> None:
-        ...
+```text
+IMMICH_MATCH=\.(JPG|RW2)$
+IMMICH_PARENT=\.JPG$
 ```
 
-you have no idea what this service actually depends on.
-Those dependencies are hidden inside the implementation.
+**Burst sequences (cover as parent)**
 
-In practice, this makes the code harder to understand, harder to reason about, and easier to misuse. Hidden dependencies are a well-known code smell.
+```text
+IMMICH_MATCH=BURST[0-9]{3}(_COVER)?\.jpg$
+IMMICH_PARENT=_COVER\.jpg$
+```
 
+Regex escaping in shell or Docker Compose may require extra backslashes; using a `.env` file often avoids mistakes.
 
-##### 2. Global state and tight coupling
+## Docker
 
-With a service locator:
+Build:
 
-* everything depends on a global object
-* services are implicitly coupled to the application context
-* dependencies are not passed explicitly
-* dependencies cannot be varied per instance
+```bash
+docker build -t immich-auto-stacker .
+```
 
-Even though the dependency exists, it is **not visible at the boundary** of the class. That makes the coupling real, but implicit.
+Run (example):
 
+```bash
+docker run --rm \
+  -e IMMICH_SERVER_URL=https://immich.example.com \
+  -e IMMICH_API_KEY=your-api-key \
+  -e IMMICH_MATCH='\.(JPG|RW2)$' \
+  -e IMMICH_PARENT='\.JPG$' \
+  immich-auto-stacker
+```
 
-##### 3. Hard to test in isolation
+Or use `--env-file` with a file containing the variables above.
 
-Because dependencies come from a global container, you cannot easily replace them.
+### Docker Compose
 
-To test this service, you would need to:
+An example [docker-compose.example.yml](docker-compose.example.yml) builds the image from this repository and sets **all configuration in the compose file** (`environment:`), including required variables (`IMMICH_SERVER_URL`, `IMMICH_API_KEY`, `IMMICH_MATCH`, `IMMICH_PARENT`) and optional ones with defaults. You do **not** need a `.env` file for Compose.
 
-* monkey-patch the application context
-* modify global state
-* or bootstrap the entire application
+1. Copy the example and edit placeholders (especially URL, API key, and regexes if your filenames differ):
 
-All of these are things we explicitly want to avoid. Services should be easy to construct with mocks or fakes.
+   ```bash
+   cp docker-compose.example.yml docker-compose.yml
+   # edit docker-compose.yml
+   ```
 
+2. Build and start (detached):
 
-##### 4. Violates the inversion of control principle
+   ```bash
+   docker compose -f docker-compose.yml up -d --build
+   ```
 
-With a service locator, the service decides *where* its dependencies come from.
+3. Follow logs:
 
-Instead of:
+   ```bash
+   docker compose logs -f immich-auto-stacker
+   ```
 
-> “You give me what I need”
+4. Stop and remove the container:
 
-it becomes:
+   ```bash
+   docker compose down
+   ```
 
-> “I’ll go fetch what I need myself”
+The service uses `restart: unless-stopped` so it keeps running between host reboots (when Docker starts). `init: true` improves signal handling for graceful shutdown (`docker compose stop`).
 
-That is the opposite of how we use inversion of control in this project.
+**Secrets:** Avoid committing a `docker-compose.yml` that contains a real API key. For production, use [Docker secrets](https://docs.docker.com/compose/how-tos/use-secrets/), or keep `IMMICH_API_KEY: ${IMMICH_API_KEY}` and export the variable in the shell before `docker compose up`.
 
+For local runs without Compose, a `.env` file next to the app is still supported by pydantic-settings; see [.env.example](.env.example) as a template.
 
-In short:
-**Service locators trade short-term convenience for long-term coupling, hidden dependencies, and poor testability.**
-That’s why we don’t use them here.
+For a **single run per container start**, set `IMMICH_ONCE: "true"` under `environment:` and consider `restart: "no"` in your compose file.
 
+## Development
 
-### Summary
+Install dev dependencies, then register hooks (including the **commit-msg** hook for [Conventional Commits](https://www.conventionalcommits.org/)):
 
-The application context exists to:
+```bash
+uv sync --all-extras
+uv run pre-commit install
+```
 
-* assemble the application once
-* keep wiring and construction out of domain code
-* enforce explicit dependencies
-* avoid global state and service locators
+After `install`, commit messages are checked against the Conventional Commits format (via [conventional-pre-commit](https://github.com/compilerla/conventional-pre-commit)). Example: `feat: add burst stacking rule`.
 
-**Services do not pull dependencies.
-Dependencies are provided by the application context.**
+Run all checks on tracked files:
 
-That convention is intentional and important to keep code clean, testable, and maintainable.
+```bash
+uv run pre-commit run --all-files
+```
 
-Sure — here’s a tightened-up version that keeps it practical and human, but a bit more deliberate and opinionated.
+Useful shortcuts (with dev extras):
 
+| Command | Purpose |
+|--------|---------|
+| `uv run ruff check src tests` | Lint |
+| `uv run ruff format src tests` | Format |
+| `uv run pyright src/immich_auto_stacker` | Type check (strict) |
+| `uv run pytest` | Tests |
+| `uv run poe lint` / `poe format` / `poe typecheck` | Same via [poethepoet](https://github.com/nat-n/poethepoet) |
 
-## Conventions
+Pre-commit runs file hygiene checks, **Ruff** (lint + format), **toml-sort**, **codespell**, **pyright**, and the hooks above. Private keys and accidental submodules are rejected.
 
-To keep the codebase consistent and predictable across projects, we follow these conventions:
+The codebase targets **pyright strict** mode.
 
-* Use the **Application Context** pattern as described above.
-  All wiring happens in one place; services do not pull dependencies themselves.
-* Follow **PEP 8** for general Python style.
-* Write **docstrings for all public classes and methods**.
-  If something is public, it should be explainable without reading the implementation.
-* Use **type hints everywhere**.
-  Treat missing types as a bug, not as an optional improvement.
-* Use **semantic versioning** for the package.
-* Keep the `README.md` **up to date** and make sure it explains how to install, configure, and run the project.
-* Use **pre-commit hooks** to enforce formatting and basic quality checks automatically.
-* Use **pytest** for all tests.
-* Use **pyright** in **strict mode** (or an alternative type checker with equivalent strictness).
-  Disabling checks via `# type: ignore[...]` is allowed only when absolutely necessary (for example when dealing with third-party libraries that ship broken or missing type hints).
-* Use **ruff** for linting and formatting.
-  Do not fight the formatter — fix the code instead.
+## License
 
-These rules are not meant to be academic. They exist to keep the codebase readable, testable, and boring to maintain.
-
-
-## Additional Information
-To get yourself more familar with how to create a Python project, some useful additional information can be found here:
-- [Python Documentation](https://www.python.org/doc/): a great source of tipps about everything related to Python.
-- [PEP 8](https://www.python.org/dev/peps/pep-0008/): style guide for writing Python code.
-- [PEP 621](https://peps.python.org/pep-0621/): information how to store project information.
-- [py-pkgs](https://py-pkgs.org/): further information revolving around how to create Python packages, testing, CI/CD, building, etc. A really useful source that provide very detailed information. (Note: we slightly modified how they organize a Python project!)
-- [pre-commit](https://pre-commit.com/): general information about pre-commit hooks, ensuring code quality, formating and a lot more!
-- [Sphinx](https://www.sphinx-doc.org/en/master/): automatically creating API documentation based on your source code.
-- [MkDocs](https://www.mkdocs.org/): creating project documentation using Markdown files.
-- [Semantic Versioning](https://semver.org/): more detailed information about how to version your Python package.
-- [Pytest](https://docs.pytest.org/en/7.4.x/): extensive information about how to write tests for your source code!
-- [uv](https://docs.astral.sh/uv/): A modern Python package and dependency manager supporting the latest PEP standards.
+MIT

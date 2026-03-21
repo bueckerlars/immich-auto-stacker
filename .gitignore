@@ -326,3 +326,7 @@ $RECYCLE.BIN/
 *.egg-info
 /.coverage
 /coverage.xml
+
+# Local secrets (use .env.example as a template)
+.env
+.env.local
