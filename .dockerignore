@@ -50,4 +50,3 @@ Thumbs.db
 # Project specific
 tests/
 # Note: uv.lock is needed for reproducible builds, so we don't ignore it
-

@@ -1,36 +1,55 @@
+# See https://pre-commit.com
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
-    -   id: check-yaml
-    -   id: check-toml
-    -   id: check-added-large-files
-    -   id: mixed-line-ending
-    -   id: check-merge-conflict
-    -   id: check-ast
-    -   id: requirements-txt-fixer
--   repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.12.12
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+      - id: check-ast
+      - id: detect-private-key
+      - id: forbid-new-submodules
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.7
     hooks:
-    -   id: ruff
-        args:
-            - --fix
--   repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-    -   id: black
--   repo: https://github.com/pappasam/toml-sort
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pappasam/toml-sort
     rev: v0.24.2
     hooks:
-    -   id: toml-sort
-        args:
-            - --in-place
-            - --all
--   repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0
+      - id: toml-sort
+        args: [--in-place, --all]
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
     hooks:
-    -   id: pyupgrade
-        args:
-            - --py310-plus
+      - id: codespell
+        exclude: ^(uv\.lock|\.venv/|htmlcov/)
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: []
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        language: system
+        entry: uv
+        args: [run, pyright, src/immich_auto_stacker]
+        pass_filenames: false
+        always_run: true

@@ -3,10 +3,17 @@ build-backend = "setuptools.build_meta"
 requires = ["setuptools>=61", "wheel"]
 
 [project]
-dependencies = []
-description = "Project Template"
-license = {text = "Proprietary"}
-name = "python-template"
+dependencies = [
+  "httpx>=0.28.1",
+  "immich-sdk",
+  "loguru>=0.7.3",
+  "pydantic-settings>=2.0.0",
+  "pydantic>=2.0.0",
+  "tenacity>=9.0.0"
+]
+description = "Periodic Immich stack automation (Raw+JPG, bursts, etc.)"
+license = {text = "MIT"}
+name = "immich-auto-stacker"
 readme = "README.md"
 requires-python = ">=3.13,<4"
 version = "0.1.0"
@@ -14,14 +21,26 @@ version = "0.1.0"
 [project.optional-dependencies]
 dev = [
   "pip-tools>=6.12.2",
+  "poethepoet>=0.42.1",
   "pre-commit>=2.20.0",
+  "pyright>=1.1.408",
   "pytest-cov>=4.0.0",
-  "pytest>=7.2.0"
+  "pytest>=7.2.0",
+  "ruff>=0.15.7"
 ]
 
+[project.scripts]
+immich-auto-stacker = "immich_auto_stacker.main:main"
+
 [project.urls]
-"Bug Tracker" = "https://github.com/bueckerlars/python-template/issues"
-"Homepage" = "https://github.com/bueckerlars/python-tempalte"
+"Bug Tracker" = "https://github.com/bueckerlars/immich-auto-stacker/issues"
+Homepage = "https://github.com/bueckerlars/immich-auto-stacker"
+
+[tool.poe.tasks]
+format = "ruff format src tests"
+lint = "ruff check src tests"
+run = "python -m immich_auto_stacker"
+typecheck = "pyright src/immich_auto_stacker"
 
 [tool.pyright]
 exclude = [".venv", "alembic/versions", "tests"]
@@ -32,7 +51,35 @@ typeCheckingMode = "strict"
 venvPath = ".venv"
 
 [tool.pytest.ini_options]
-addopts = "-ra --durations=10 --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml"
+addopts = "-ra --durations=10 --cov=immich_auto_stacker --cov-report=term-missing --cov-report=html --cov-report=xml"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+extend-ignore = [
+  "E501" # line length (handled by ruff format; docstrings may exceed)
+]
+select = [
+  "B", # flake8-bugbear
+  "E", # pycodestyle errors
+  "F", # Pyflakes
+  "I", # isort
+  "RUF", # Ruff-specific
+  "SIM", # flake8-simplify
+  "UP", # pyupgrade
+  "W" # pycodestyle warnings
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["immich_auto_stacker"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+immich-sdk = {git = "https://github.com/bueckerlars/immich-sdk.git"}

@@ -1,0 +1,39 @@
+# Example Compose stack — no .env file required; edit placeholders below.
+#
+# Usage:
+#   cp docker-compose.example.yml docker-compose.yml
+#   # Set IMMICH_SERVER_URL and IMMICH_API_KEY (and regexes if needed)
+#   docker compose -f docker-compose.yml up -d --build
+#   docker compose logs -f immich-auto-stacker
+#
+# Stop: docker compose down
+#
+# Do not commit real API keys. For production, prefer Docker secrets or
+# `environment: IMMICH_API_KEY: ${IMMICH_API_KEY}` with vars exported in the shell.
+
+services:
+  immich-auto-stacker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: immich-auto-stacker:local
+    container_name: immich-auto-stacker
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    environment:
+      # --- Required (replace values) ---
+      IMMICH_SERVER_URL: https://immich.example.com
+      IMMICH_API_KEY: your-api-key-here
+      # JPEG + Fujifilm RAF; JPEG is parent (see README)
+      IMMICH_MATCH: '(?i)\.(jpe?g|raf)$'
+      IMMICH_PARENT: '(?i)\.jpe?g$'
+      # --- Optional (defaults match application; remove to use app defaults) ---
+      IMMICH_LOG_LEVEL: INFO
+      IMMICH_COMPARE_CREATED: "false"
+      IMMICH_NEWER_THAN: 0h
+      IMMICH_SCAN_INTERVAL: 1h
+      IMMICH_ONCE: "false"
+      IMMICH_READ_ONLY: "false"
+      IMMICH_DRY_RUN: "false"
+      IMMICH_INSECURE_TLS: "false"
