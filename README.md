@@ -174,9 +174,8 @@ For a **single run per container start**, set `IMMICH_ONCE: "true"` under `envir
 Pushing a **version tag** matching `v*` (for example `v1.0.0`) runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which:
 
 1. Builds the [Dockerfile](Dockerfile) and pushes the image to the **GitHub Container Registry** as `ghcr.io/<owner>/<repo>:<tag>` (repository name lowercased).
-2. Creates a **GitHub Release** for that tag with [**automatically generated release notes**](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes) (merged PRs and commits since the previous tag).
-3. **Prepends** a short description with `docker pull`, image digest, and link to the package page.
-4. Attaches **`docker-image.txt`** (pull command and digest) and **[LICENSE](LICENSE)** as release assets.
+2. Creates a **GitHub Release** for that tag. The description starts with [**automatically generated release notes**](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes) (merged PRs and commits since the previous tag), followed by a **Container image (GHCR)** section with `docker pull`, digest, and link to the package page.
+3. Attaches **[LICENSE](LICENSE)** as a release asset.
 
 To publish:
 

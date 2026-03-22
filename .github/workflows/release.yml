@@ -1,5 +1,6 @@
 # Build and push Docker image to GHCR when a version tag is pushed, then create
-# a GitHub Release with auto-generated notes (GitHub API) and release assets.
+# a GitHub Release: auto-generated "what's changed" first, then container image
+# details; LICENSE attached as release asset.
 
 name: Release
 
@@ -59,36 +60,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Write image reference file (release asset)
+      # GitHub prepends custom `body` when using generate_release_notes; we need
+      # "what's changed" first, so we fetch generated notes via API and append Docker.
+      - name: Compose release body
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f "tag_name=${GITHUB_REF_NAME}" \
+            --jq .body > notes.md
           {
-            echo "Immich Auto-Stacker — container reference"
+            cat notes.md
             echo ""
-            echo "Pull: ${{ steps.image.outputs.name }}:${{ github.ref_name }}"
-            echo "Digest: ${{ steps.build.outputs.digest }}"
+            echo "## Container image (GHCR)"
             echo ""
-            echo "OCI images are not uploaded as tarballs; use docker pull above."
-          } > docker-image.txt
+            echo "The image is published to **GitHub Container Registry** for this tag. Use \`docker pull\` to fetch it."
+            echo ""
+            echo '```bash'
+            echo "docker pull ${{ steps.image.outputs.name }}:${{ github.ref_name }}"
+            echo '```'
+            echo ""
+            echo "**Digest:** \`${{ steps.build.outputs.digest }}\`"
+            echo ""
+            echo "**Package:** [GitHub Packages](https://github.com/${{ github.repository }}/pkgs/container/immich-auto-stacker)"
+          } > release-body.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          body: |
-            ## Container image (GHCR)
-
-            The image is published to **GitHub Container Registry** for this tag (not as a single downloadable binary; use `docker pull`).
-
-            ```bash
-            docker pull ${{ steps.image.outputs.name }}:${{ github.ref_name }}
-            ```
-
-            **Digest:** `${{ steps.build.outputs.digest }}`
-
-            **Package:** [GitHub Packages](https://github.com/${{ github.repository }}/pkgs/container/immich-auto-stacker)
-
-            ---
-
-          files: |
-            docker-image.txt
-            LICENSE
+          body_path: release-body.md
+          files: LICENSE
