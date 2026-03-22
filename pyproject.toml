@@ -9,14 +9,15 @@ dependencies = [
   "loguru>=0.7.3",
   "pydantic-settings>=2.0.0",
   "pydantic>=2.0.0",
-  "tenacity>=9.0.0"
+  "tenacity>=9.0.0",
+  "tqdm>=4.66.0"
 ]
 description = "Periodic Immich stack automation (Raw+JPG, bursts, etc.)"
 license = {text = "MIT"}
 name = "immich-auto-stacker"
 readme = "README.md"
 requires-python = ">=3.13,<4"
-version = "1.0.1"
+version = "1.0.2"
 
 [project.optional-dependencies]
 dev = [
