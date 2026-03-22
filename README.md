@@ -169,6 +169,24 @@ For local runs without Compose, a `.env` file next to the app is still supported
 
 For a **single run per container start**, set `IMMICH_ONCE: "true"` under `environment:` and consider `restart: "no"` in your compose file.
 
+### Releases (GitHub Actions)
+
+Pushing a **version tag** matching `v*` (for example `v1.0.0`) runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which:
+
+1. Builds the [Dockerfile](Dockerfile) and pushes the image to the **GitHub Container Registry** as `ghcr.io/<owner>/<repo>:<tag>` (repository name lowercased).
+2. Creates a **GitHub Release** for that tag with [**automatically generated release notes**](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes) (merged PRs and commits since the previous tag).
+3. **Prepends** a short description with `docker pull`, image digest, and link to the package page.
+4. Attaches **`docker-image.txt`** (pull command and digest) and **[LICENSE](LICENSE)** as release assets.
+
+To publish:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The container is **not** uploaded as a huge tarball; use `docker pull` from GHCR. Ensure the repository **Actions** permissions allow writing packages and releases (default `GITHUB_TOKEN` is sufficient for public repos).
+
 ## Development
 
 Install dev dependencies, then register hooks (including the **commit-msg** hook for [Conventional Commits](https://www.conventionalcommits.org/)):
