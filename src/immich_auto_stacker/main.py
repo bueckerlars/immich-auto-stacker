@@ -12,6 +12,7 @@ from immich_auto_stacker.context import ApplicationContext
 from immich_auto_stacker.logging_setup import configure_logging
 from immich_auto_stacker.settings import Settings
 from immich_auto_stacker.stacker_service import run_scan_cycle
+from immich_auto_stacker.startup_log import log_effective_settings
 
 _stop_flag = False
 
@@ -32,6 +33,7 @@ def main() -> None:
         sys.exit(1)
 
     configure_logging(settings.log_level)
+    log_effective_settings(settings)
 
     if settings.insecure_tls:
         logger.warning(

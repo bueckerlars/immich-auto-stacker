@@ -17,6 +17,9 @@ from immich_auto_stacker.settings import Settings
 if TYPE_CHECKING:
     from immich_auto_stacker.immich_api import ImmichApiClient
 
+SEARCH_PAGE_SIZE = 500
+SEARCH_LOG_EVERY_N_PAGES = 5
+
 
 @dataclass
 class ScanStats:
@@ -52,14 +55,27 @@ def run_scan_cycle(settings: Settings, api: ImmichApiClient) -> ScanStats:
     if settings.newer_than_delta.total_seconds() != 0:
         taken_after = datetime.now(UTC) - settings.newer_than_delta
 
+    taken_after_log = (
+        taken_after.isoformat()
+        if taken_after is not None
+        else "(none — all matching assets)"
+    )
+    logger.info(
+        "Phase 1 — metadata search: page_size={}, takenAfter={}",
+        SEARCH_PAGE_SIZE,
+        taken_after_log,
+    )
+
     groups: dict[str, StackGroup] = {}
     next_page: float | None = 1.0
     total_count = 0
+    page_index = 0
 
     while next_page is not None:
+        page_index += 1
         dto = MetadataSearchDto.model_construct(
             page=int(next_page),
-            size=500,
+            size=SEARCH_PAGE_SIZE,
         )
         resp = api.search_metadata(dto, taken_after=taken_after)
         assets_page = resp.assets
@@ -76,14 +92,32 @@ def run_scan_cycle(settings: Settings, api: ImmichApiClient) -> ScanStats:
             )
         raw_next = assets_page.nextPage
         next_page = None if raw_next is None else float(raw_next)
+        is_last = raw_next is None
+        should_log_page = (
+            page_index == 1 or page_index % SEARCH_LOG_EVERY_N_PAGES == 0 or is_last
+        )
+        if should_log_page:
+            logger.info(
+                "Search phase: page={} | items_in_page={} | total_count_field={} | "
+                "candidate_groups={} | next_page={}",
+                page_index,
+                len(assets_page.items),
+                assets_page.count,
+                len(groups),
+                raw_next,
+            )
 
     logger.info(
-        "Search finished: {} assets in page stream, {} candidate groups",
+        "Search finished: accumulated total_count field={}, {} candidate groups (by regex key)",
         total_count,
         len(groups),
     )
 
     group_items = list(groups.items())
+    logger.info(
+        "Phase 2 — stacks: processing {} candidate groups (create, skip, or dry-run per group)",
+        len(group_items),
+    )
     with tqdm(
         group_items,
         total=len(group_items),
@@ -151,6 +185,15 @@ def run_scan_cycle(settings: Settings, api: ImmichApiClient) -> ScanStats:
                     },
                 )
 
+    logger.info(
+        "Stack phase summary: incomplete_groups={} stackable_groups={} already_stacked={} "
+        "created={} failed={} (dry_run/read_only do not increment created)",
+        stats.not_stackable,
+        stats.stackable,
+        stats.already_stacked,
+        stats.success,
+        stats.failed,
+    )
     logger.info(
         "Scan done: stackable={} already_stacked={} not_stackable={} success={} failed={}",
         stats.stackable,

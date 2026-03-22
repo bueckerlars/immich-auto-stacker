@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from typing import Any, cast
 
@@ -12,7 +13,14 @@ from immich_sdk.models import (
     MetadataSearchDto,
     SearchResponseDto,
 )
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from loguru import logger
+from tenacity import (
+    RetryCallState,
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 
 def _server_version_display(payload: dict[str, Any]) -> str:
@@ -33,6 +41,17 @@ def _server_version_display(payload: dict[str, Any]) -> str:
         return f"{major}.{minor}.{patch}"
     except KeyError:
         return str(payload)
+
+
+def _log_retry_before_sleep(retry_state: RetryCallState) -> None:
+    exc: BaseException | None = None
+    if retry_state.outcome is not None:
+        exc = retry_state.outcome.exception()
+    logger.warning(
+        "Immich API will retry (attempt {}): {}",
+        retry_state.attempt_number,
+        exc,
+    )
 
 
 def _should_retry(exc: BaseException) -> bool:
@@ -110,15 +129,25 @@ class ImmichApiClient:
             retry=retry_if_exception(_should_retry),
             stop=stop_after_attempt(self._max_retries),
             wait=wait_exponential(multiplier=1, min=1, max=10),
+            before_sleep=_log_retry_before_sleep,
             reraise=True,
         )
         def _do() -> httpx.Response:
+            t0 = time.perf_counter()
             with httpx.Client(timeout=self._timeout, verify=self._verify) as client:
                 resp = client.request(
                     method,
                     url,
                     headers=self._headers(),
                     json=json_body,
+                )
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                logger.debug(
+                    "HTTP {} {} -> {} in {:.1f}ms",
+                    method,
+                    path,
+                    resp.status_code,
+                    elapsed_ms,
                 )
                 try:
                     resp.raise_for_status()
