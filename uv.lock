@@ -230,7 +230,7 @@ dependencies = [
 ]
 name = "immich-auto-stacker"
 source = {editable = "."}
-version = "1.0.2"
+version = "1.0.3"
 
 [package.metadata]
 provides-extras = ["dev"]

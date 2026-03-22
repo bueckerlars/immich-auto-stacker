@@ -17,7 +17,7 @@ license = {text = "MIT"}
 name = "immich-auto-stacker"
 readme = "README.md"
 requires-python = ">=3.13,<4"
-version = "1.0.2"
+version = "1.0.3"
 
 [project.optional-dependencies]
 dev = [
