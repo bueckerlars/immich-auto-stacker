@@ -225,12 +225,13 @@ dependencies = [
   {name = "loguru"},
   {name = "pydantic"},
   {name = "pydantic-settings"},
+  {name = "tabulate"},
   {name = "tenacity"},
   {name = "tqdm"}
 ]
 name = "immich-auto-stacker"
 source = {editable = "."}
-version = "1.0.3"
+version = "1.0.4"
 
 [package.metadata]
 provides-extras = ["dev"]
@@ -247,6 +248,7 @@ requires-dist = [
   {name = "loguru", specifier = ">=0.7.3"},
   {name = "pydantic", specifier = ">=2.0.0"},
   {name = "pydantic-settings", specifier = ">=2.0.0"},
+  {name = "tabulate", specifier = ">=0.9.0"},
   {name = "tenacity", specifier = ">=9.0.0"},
   {name = "tqdm", specifier = ">=4.66.0"}
 ]
@@ -629,6 +631,15 @@ source = {registry = "https://pypi.org/simple"}
 version = "82.0.1"
 wheels = [
   {hash = "sha256:a59e362652f08dcd477c78bb6e7bd9d80a7995bc73ce773050228a348ce2e5bb", size = 1006223, upload-time = "2026-03-09T12:47:15.026Z", url = "https://files.pythonhosted.org/packages/9d/76/f789f7a86709c6b087c5a2f52f911838cad707cc613162401badc665acfe/setuptools-82.0.1-py3-none-any.whl"}
+]
+
+[[package]]
+name = "tabulate"
+sdist = {hash = "sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d", size = 91754, upload-time = "2026-03-04T18:55:34.402Z", url = "https://files.pythonhosted.org/packages/46/58/8c37dea7bbf769b20d58e7ace7e5edfe65b849442b00ffcdd56be88697c6/tabulate-0.10.0.tar.gz"}
+source = {registry = "https://pypi.org/simple"}
+version = "0.10.0"
+wheels = [
+  {hash = "sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3", size = 39814, upload-time = "2026-03-04T18:55:31.284Z", url = "https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl"}
 ]
 
 [[package]]

@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 SEARCH_PAGE_SIZE = 500
 SEARCH_LOG_EVERY_N_PAGES = 5
+# INFO lines during stack phase (tqdm is often invisible in K8s without TTY)
+STACK_LOG_EVERY_N_GROUPS = 50
 
 
 @dataclass
@@ -42,6 +44,28 @@ def _short_key(key: str, max_len: int = 48) -> str:
 def _stack_postfix(pbar: Any, refresh: bool, fields: dict[str, object]) -> None:
     """Thin wrapper: tqdm typings vary by import path; postfix is dynamic."""
     pbar.set_postfix(ordered_dict=fields, refresh=refresh)
+
+
+def _maybe_log_stack_progress(
+    n: int,
+    total_groups: int,
+    stats: ScanStats,
+) -> None:
+    if STACK_LOG_EVERY_N_GROUPS <= 0:
+        return
+    if n % STACK_LOG_EVERY_N_GROUPS != 0 and n != total_groups:
+        return
+    logger.info(
+        "Stack phase progress: {}/{} groups | incomplete={} stackable_seen={} "
+        "already_stacked={} created={} failed={}",
+        n,
+        total_groups,
+        stats.not_stackable,
+        stats.stackable,
+        stats.already_stacked,
+        stats.success,
+        stats.failed,
+    )
 
 
 def run_scan_cycle(settings: Settings, api: ImmichApiClient) -> ScanStats:
@@ -118,72 +142,75 @@ def run_scan_cycle(settings: Settings, api: ImmichApiClient) -> ScanStats:
         "Phase 2 — stacks: processing {} candidate groups (create, skip, or dry-run per group)",
         len(group_items),
     )
+    total_groups = len(group_items)
     with tqdm(
         group_items,
-        total=len(group_items),
+        total=total_groups,
         desc="Stacks",
         unit="grp",
         file=sys.stderr,
         mininterval=0.25,
         disable=False,
     ) as pbar:
-        for key, s in pbar:
+        for n, (key, s) in enumerate(pbar, start=1):
             if not s.stackable():
                 stats.not_stackable += 1
                 logger.debug("Skip group {!r}: need parent and at least one child", key)
-                continue
-            assert s.parent_id is not None
-            stats.stackable += 1
-            parent = api.get_asset_info(s.parent_id)
-            st = parent.stack
-            if st is not None and st.assetCount > 0:
-                stats.already_stacked += 1
-                logger.debug("Group {!r}: parent already in a stack", key)
-                continue
-
-            ordered_ids: list[str] = [s.parent_id]
-            for cid in s.child_ids:
-                if cid not in ordered_ids:
-                    ordered_ids.append(cid)
-
-            if settings.read_only or settings.dry_run:
-                _stack_postfix(
-                    pbar,
-                    refresh=False,
-                    fields={
-                        "last": _short_key(key),
-                        "mode": "dry",
-                        "n": len(ordered_ids),
-                    },
-                )
-                continue
-
-            try:
-                api.create_stack(ordered_ids)
-            except Exception:
-                logger.exception("Failed to create stack for group {!r}", key)
-                stats.failed += 1
-                _stack_postfix(
-                    pbar,
-                    refresh=True,
-                    fields={
-                        "last": _short_key(key),
-                        "ok": stats.success,
-                        "fail": stats.failed,
-                    },
-                )
             else:
-                stats.success += 1
-                _stack_postfix(
-                    pbar,
-                    refresh=True,
-                    fields={
-                        "last": _short_key(key),
-                        "ok": stats.success,
-                        "fail": stats.failed,
-                        "n": len(ordered_ids),
-                    },
-                )
+                assert s.parent_id is not None
+                stats.stackable += 1
+                parent = api.get_asset_info(s.parent_id)
+                st = parent.stack
+                if st is not None and st.assetCount > 0:
+                    stats.already_stacked += 1
+                    logger.debug("Group {!r}: parent already in a stack", key)
+                else:
+                    ordered_ids: list[str] = [s.parent_id]
+                    for cid in s.child_ids:
+                        if cid not in ordered_ids:
+                            ordered_ids.append(cid)
+
+                    if settings.read_only or settings.dry_run:
+                        _stack_postfix(
+                            pbar,
+                            refresh=False,
+                            fields={
+                                "last": _short_key(key),
+                                "mode": "dry",
+                                "n": len(ordered_ids),
+                            },
+                        )
+                    else:
+                        try:
+                            api.create_stack(ordered_ids)
+                        except Exception:
+                            logger.exception(
+                                "Failed to create stack for group {!r}", key
+                            )
+                            stats.failed += 1
+                            _stack_postfix(
+                                pbar,
+                                refresh=True,
+                                fields={
+                                    "last": _short_key(key),
+                                    "ok": stats.success,
+                                    "fail": stats.failed,
+                                },
+                            )
+                        else:
+                            stats.success += 1
+                            _stack_postfix(
+                                pbar,
+                                refresh=True,
+                                fields={
+                                    "last": _short_key(key),
+                                    "ok": stats.success,
+                                    "fail": stats.failed,
+                                    "n": len(ordered_ids),
+                                },
+                            )
+
+            _maybe_log_stack_progress(n, total_groups, stats)
 
     logger.info(
         "Stack phase summary: incomplete_groups={} stackable_groups={} already_stacked={} "
