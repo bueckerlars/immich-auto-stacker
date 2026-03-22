@@ -15,12 +15,14 @@ WORKDIR /build
 COPY pyproject.toml uv.lock* ./
 COPY src/ ./src/
 
-# Install dependencies and package (without dev dependencies)
+# Install dependencies and package (without dev dependencies).
+# --no-editable: install the app into site-packages so copying .venv to /app works;
+# editable installs point at /build/src and break at runtime (No module named immich_auto_stacker).
 # Use --frozen only if uv.lock exists, otherwise let uv create it
 RUN if [ -f uv.lock ]; then \
-        uv sync --frozen --no-dev --no-cache; \
+        uv sync --frozen --no-dev --no-cache --no-editable; \
     else \
-        uv sync --no-dev --no-cache; \
+        uv sync --no-dev --no-cache --no-editable; \
     fi
 
 # Runtime stage
@@ -29,12 +31,8 @@ FROM python:3.13-slim AS runtime
 # Set working directory
 WORKDIR /app
 
-# Copy installed virtual environment from builder
+# Copy installed virtual environment from builder (package is in site-packages, not editable)
 COPY --from=builder /build/.venv /app/.venv
-
-# Copy application source code
-COPY src/ ./src/
-COPY pyproject.toml ./
 
 # Use the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
